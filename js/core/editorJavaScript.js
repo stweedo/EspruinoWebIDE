@@ -353,6 +353,6 @@
       editors.forEach(editor => { if (editor.visible) editor.setVisible(false); });
     },
     getEditors : () => editors, // return list of current editors created with createNewEditor
-    DEFAULT_CODE : "var  on = false;\nsetInterval(function() {\n  on = !on;\n  LED1.write(on);\n}, 500);"
+    DEFAULT_CODE : ""
   };
 }());
