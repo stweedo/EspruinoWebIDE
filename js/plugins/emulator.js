@@ -14,7 +14,7 @@ Use embed.js on the client side to link this in.
 
   var EMULATORS = [
     {
-      id : "BANGLEJS2",
+      id : "BANGLEJS",
       name : "Bangle.js 1",
       description : '240x240 16 bit, 3 buttons',
       link : "https://www.espruino.com/Bangle.js",
@@ -61,19 +61,24 @@ Use embed.js on the client side to link this in.
     }
   });
 
-  function chooseDevice(callback) {
+  function chooseDevice(callback, forcePrompt) {
+    var requestedDevice = new URLSearchParams(window.location.search).get("emulatordevice");
+    var requestedEmulator = EMULATORS.find(e => e.id == requestedDevice);
+    if (requestedEmulator && !forcePrompt) return callback(requestedEmulator, true);
+    var emulators = requestedEmulator ? [requestedEmulator] : EMULATORS;
+
     var selected = false;
     var popup = Espruino.Core.App.openPopup({
       id: "sendmethod",
       title: "Upload Destination",
       padding: true,
-      contents: Espruino.Core.HTML.domList(EMULATORS.map(e=>({
+      contents: Espruino.Core.HTML.domList(emulators.map(e=>({
         title: e.name,
         description : e.description,//+`<a href="${e.link}" target="_blank">more info</a>`,
         callback : function() {
           selected=true;
           popup.close();
-          callback(e);
+          callback(e, false);
         }
       }))),
       position: "auto",
@@ -115,7 +120,7 @@ Use embed.js on the client side to link this in.
       callback([port], true/*instantPorts*/);
     },
     "open": function(path, openCallback, receiveCallback, disconnectCallback) {
-      chooseDevice(function(emuDevice) {
+      function openEmulator(emuDevice, autoselected) {
         if (!emuDevice) {
           openCallback(null); // flag error
           return;
@@ -132,6 +137,11 @@ Use embed.js on the client side to link this in.
           url = url.substr(0,url.lastIndexOf("/"));
         url = window.location.origin + url + emuDevice.emulatorURL;
         emu = window.open(url, "banglewindow", emuDevice.emulatorWin);
+        if (!emu && autoselected) return chooseDevice(openEmulator, true);
+        if (!emu) {
+          openCallback(null);
+          return;
+        }
         var inited = false;
         emu.addEventListener("load", function() {
           if (!inited) post({type:"init"});
@@ -143,7 +153,8 @@ Use embed.js on the client side to link this in.
           // So: Emu window will close its-self if window.opener.emu is undefined.
           device.close()
         });
-      });
+      }
+      chooseDevice(openEmulator);
     },
     "write": function(d, callback) {
       post({type:"rx",data:d});

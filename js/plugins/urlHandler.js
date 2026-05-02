@@ -18,12 +18,60 @@
     if (typeof window!=="undefined" &&
         window.location &&
         (window.location.origin=="https://localhost" ||
+         window.location.hostname=="localhost" ||
+         window.location.hostname=="127.0.0.1" ||
          window.location.origin=="https://espruino.github.io" ||
+         window.location.origin=="https://espruino.com" ||
          window.location.origin=="https://www.espruino.com")) {
       setTimeout(function() {
         handle(window.location.href);
       }, 200);
     }
+  }
+
+  function isTrustedAppLoaderOrigin(origin) {
+    try {
+      var url = new URL(origin);
+      return ["https://banglejs.com","https://espruino.github.io"].includes(origin) ||
+             ["localhost","127.0.0.1"].includes(url.hostname);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function setupAppLoaderUpload(nonce) {
+    if (!nonce || !new URLSearchParams(window.location.search).has("emulator")) return;
+    var uploadStarted = false;
+    // BangleApps opens WebIDE with ?apploader=<nonce>, then sends one
+    // bangleapps.emulatorUpload message containing the generated install code.
+    window.addEventListener("message", function(event) {
+      var msg = event.data || {};
+      if (msg.type!="bangleapps.emulatorUpload" || msg.nonce!=nonce) return;
+      if (event.source!==window.opener || !isTrustedAppLoaderOrigin(event.origin)) {
+        console.warn("Ignoring BangleApps emulator upload from "+event.origin);
+        return;
+      }
+      if (uploadStarted) return;
+      uploadStarted = true;
+      event.source.postMessage({
+        type:"bangleapps.emulatorUpload",
+        nonce:nonce,
+        status:"accepted"
+      }, event.origin);
+      Espruino.Core.MenuPortSelector.ensureConnected(function() {
+        Espruino.Core.Terminal.focus();
+        Espruino.callProcessor("sending");
+        Espruino.Core.Utils.getEspruinoPrompt(function() {
+          Espruino.Core.Serial.write(msg.code, true, function() {
+            event.source.postMessage({
+              type:"bangleapps.emulatorUpload",
+              nonce:nonce,
+              status:"done"
+            }, event.origin);
+          });
+        });
+      });
+    });
   }
 
   function handleQuery(key, val) {
@@ -75,6 +123,9 @@
             });
           });
         }));
+        break;
+      case "apploader": // Receive a generated BangleApps install script from opener
+        setupAppLoaderUpload(val);
         break;
       case "dev": // ?dev=BLE_devicename can restrict what we connect to
         Espruino.Config.WEB_SERIAL = false;
